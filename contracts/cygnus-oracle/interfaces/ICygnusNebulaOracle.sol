@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Unlicensed
 pragma solidity >=0.8.4;
 
-import {AggregatorV3Interface} from "./AggregatorV3Interface.sol";
-import {IDexPair} from "./IDexPair.sol";
-import {IERC20} from "./IERC20.sol";
+import { AggregatorV3Interface } from "./AggregatorV3Interface.sol";
+import { IERC20 } from "./IERC20.sol";
 
 /**
  *  @title ICygnusNebulaOracle Interface to interact with Cygnus' Chainlink oracle
@@ -37,16 +36,6 @@ interface ICygnusNebulaOracle {
      *  @custom:error PendingAdminAlreadySet Reverts when attempting to set the same pending admin twice
      */
     error CygnusNebulaOracle__PendingAdminAlreadySet(address pendingAdmin);
-
-    /**
-     *  @custom:error NebulaRecordNotInitialized Reverts when getting a record if not initialized
-     */
-    error CygnusNebulaOracle__NebulaRecordNotInitialized(IDexPair lpTokenPair);
-
-    /**
-     *  @custom:error NebulaRecordAlreadyInitialized Reverts when re-initializing a record
-     */
-    error CygnusNebulaOracle__NebulaRecordAlreadyInitialized(IDexPair lpTokenPair);
 
     /*  ═══════════════════════════════════════════════════════════════════════════════════════════════════════ 
             2. CUSTOM EVENTS
@@ -178,12 +167,15 @@ interface ICygnusNebulaOracle {
     function denominationAggregator() external view returns (AggregatorV3Interface);
 
     /*  ────────────────────────────────────────────── External ───────────────────────────────────────────────  */
+
     /**
-     *  @notice Get the annualized log APR given 2 exchange rates and the time elapsed between them
+     *  @dev Experimental, do not use 👾
+     *  @notice Get the annualized log APR given 2 exchange rates and the time elapsed between them. Ideally this
+     *          requires a reasonable time window between updates (~12-24 hours) to reflect the APR correctly.
      *  @param exchangeRateLast The previous exchange rate
      *  @param exchangeRateNow The current exchange rate
      *  @param timeElapsed Time elapsed between the exchange rates
-     *  @return apr The estimated APR
+     *  @return apr The estimated APR of the pool.
      */
     function getAnnualizedLogApr(
         uint256 exchangeRateLast,
@@ -219,7 +211,9 @@ interface ICygnusNebulaOracle {
      *  @return amount0 The amount of token0 in the limit position
      *  @return amount1 The amount of token1 in the limit position
      */
-    function getLimitPosition(address lpTokenPair) external view returns (uint256 liquidity, uint256 amount0, uint256 amount1);
+    function getLimitPosition(
+        address lpTokenPair
+    ) external view returns (uint256 liquidity, uint256 amount0, uint256 amount1);
 
     /**
      *  @notice Returns the total amounts of a gamma pool using the fair reserves of the position
@@ -228,7 +222,9 @@ interface ICygnusNebulaOracle {
      *  @return amount0 The amount of token0 in the base position
      *  @return amount1 The amount of token1 in the base position
      */
-    function getBasePosition(address lpTokenPair) external view returns (uint256 liquidity, uint256 amount0, uint256 amount1);
+    function getBasePosition(
+        address lpTokenPair
+    ) external view returns (uint256 liquidity, uint256 amount0, uint256 amount1);
 
     /**
      *  @notice Returns the total amounts of a gamma pool using the fair reserves of the position
@@ -251,7 +247,11 @@ interface ICygnusNebulaOracle {
      *  @param priceFeedB The contract address of the Chainlink's aggregator contract for this Gamma Vault's token1
      *  @custom:security non-reentrant
      */
-    function initializeNebula(address lpTokenPair, AggregatorV3Interface priceFeedA, AggregatorV3Interface priceFeedB) external;
+    function initializeNebula(
+        address lpTokenPair,
+        AggregatorV3Interface priceFeedA,
+        AggregatorV3Interface priceFeedB
+    ) external;
 
     /**
      *  @notice Sets a new pending admin for the Oracle

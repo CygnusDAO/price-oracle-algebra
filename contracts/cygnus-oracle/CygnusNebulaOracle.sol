@@ -2,21 +2,21 @@
 pragma solidity >=0.8.4;
 
 // Dependencies
-import {ICygnusNebulaOracle} from "./interfaces/ICygnusNebulaOracle.sol";
-import {ReentrancyGuard} from "./utils/ReentrancyGuard.sol";
-import {Context} from "./utils/Context.sol";
-import {ERC20Normalizer} from "./utils/ERC20Normalizer.sol";
+import { ICygnusNebulaOracle } from "./interfaces/ICygnusNebulaOracle.sol";
+import { Context } from "./utils/Context.sol";
+import { ReentrancyGuard } from "./utils/ReentrancyGuard.sol";
+import { ERC20Normalizer } from "./utils/ERC20Normalizer.sol";
 
 // Libraries
-import {PRBMath, PRBMathUD60x18} from "./libraries/PRBMathUD60x18.sol";
-import {LiquidityAmounts} from "./libraries/LiquidityAmounts.sol";
-import {TickMath} from "./libraries/TickMath.sol";
+import { TickMath } from "./libraries/TickMath.sol";
+import { LiquidityAmounts } from "./libraries/LiquidityAmounts.sol";
+import { PRBMath, PRBMathUD60x18 } from "./libraries/PRBMathUD60x18.sol";
 
 // Interfaces
-import {AggregatorV3Interface} from "./interfaces/AggregatorV3Interface.sol";
-import {IERC20} from "./interfaces/IERC20.sol";
-import {IHypervisor} from "./interfaces/IHypervisor.sol";
-import {IAlgebraPoolState} from "./interfaces/IAlgebraPoolState.sol";
+import { IERC20 } from "./interfaces/IERC20.sol";
+import { IHypervisor } from "./interfaces/IHypervisor.sol";
+import { IAlgebraPoolState } from "./interfaces/IAlgebraPoolState.sol";
+import { AggregatorV3Interface } from "./interfaces/AggregatorV3Interface.sol";
 
 /**
  *  @title  CygnusNebulaOracle
@@ -28,12 +28,14 @@ import {IAlgebraPoolState} from "./interfaces/IAlgebraPoolState.sol";
  *          We derive the sqrtPriceX96 from chainlink oracles ourselves in the function `lpTokenPriceUsd`. We do this
  *          to get the fair reserves amount from the position instead of querying the square root price from the pool
  *          itself, avoiding price manipulation.`
+ *
  *          First we calculate the sqrt price given asset prices:
  *          sqrtPriceX96 = sqrt(token1/token0) * 2^96                                 [From Uniswap's definition]
  *                       = sqrt((p0 * 10^UNITS_1) / (p1 * 10^UNITS_0)) * 2^96
  *                       = sqrt((p0 * 10^UNITS_1) / (p1 * 10^UNITS_0)) * 2^48 * 2^48
  *                       = sqrt((p0 * 10^UNITS_1 * 2^96) / (p1 * 10^UNITS_0)) * 2^48
- *          Then we get the base amounts + limit abouts + balanceOf hypervisor given our sqrtPrice:
+ *
+ *          Then we get reserves = base amounts + limit abouts + balanceOf hypervisor given our sqrtPrice. Finally:
  *          Token Price  = TVL / Token Supply = (r0 * p0 + r1 * p1) / totalSupply
  */
 contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ERC20Normalizer {
@@ -188,10 +190,15 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
 
     /**
      *  @notice The decimals are always normalized to 18
-     *  @notice returns the sqrt price given 2 asset prices. 
+     *  @notice returns the sqrt price given 2 asset prices.
      *  @notice sqrtPriceX96 = sqrt((p0 * 10^UNITS_1 * 2^96) / (p1 * 10^UNITS_0)) * 2^48
      */
-    function getSqrtPriceX96(uint256 priceA, uint256 decimalsA, uint256 priceB, uint256 decimalsB) internal pure returns (uint160) {
+    function getSqrtPriceX96Internal(
+        uint256 priceA,
+        uint256 decimalsA,
+        uint256 priceB,
+        uint256 decimalsB
+    ) internal pure returns (uint160) {
         // Return price given assets and decimals
         return uint160(PRBMath.sqrt((priceA * (10 ** decimalsB) * (1 << 96)) / (priceB * (10 ** decimalsA))) << 48);
     }
@@ -253,6 +260,46 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
      *  @return amount0 Amount of token0 owed
      *  @return amount1 Amount of token1 owed
      */
+    function getLimitPositionInternal(
+        CygnusNebula memory cygnusNebula,
+        uint160 sqrtPriceX96
+    ) internal view returns (uint256 liquidity, uint256 amount0, uint256 amount1) {
+        // Limit lower tick
+        int24 limitLower = IHypervisor(cygnusNebula.underlying).limitLower();
+
+        // Limit upper tick
+        int24 limitUpper = IHypervisor(cygnusNebula.underlying).limitUpper();
+
+        // Get the position given the ranges
+        (uint128 positionLiquidity, uint128 tokensOwed0, uint128 tokensOwed1) = algebraPosition(
+            cygnusNebula.underlying,
+            limitLower,
+            limitUpper,
+            cygnusNebula.algebraPool
+        );
+
+        // Compute amounts for liquidity based on our sqrtPrice
+        (amount0, amount1) = getAmountsForLiquidity(sqrtPriceX96, limitLower, limitUpper, positionLiquidity);
+
+        // Amount of token0 in limit position
+        amount0 += tokensOwed0;
+
+        // Amount of token1 in limit position
+        amount1 += tokensOwed1;
+
+        // Liquidity in limit position
+        liquidity = positionLiquidity;
+    }
+
+
+    /**
+     *  @notice Get the base position from the Gamma Vault with our sqrtPrice
+     *  @param cygnusNebula The struct of the gamma vault
+     *  @param sqrtPriceX96 The square root price calculated using Chainlink oracles
+     *  @return liquidity The amount of liquidity of the position
+     *  @return amount0 Amount of token0 owed
+     *  @return amount1 Amount of token1 owed
+     */
     function getBasePositionInternal(
         CygnusNebula memory cygnusNebula,
         uint160 sqrtPriceX96
@@ -285,45 +332,6 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
     }
 
     /**
-     *  @notice Get the base position from the Gamma Vault with our sqrtPrice
-     *  @param cygnusNebula The struct of the gamma vault
-     *  @param sqrtPriceX96 The square root price calculated using Chainlink oracles
-     *  @return liquidity The amount of liquidity of the position
-     *  @return amount0 Amount of token0 owed
-     *  @return amount1 Amount of token1 owed
-     */
-    function getLimitPositionInternal(
-        CygnusNebula memory cygnusNebula,
-        uint160 sqrtPriceX96
-    ) internal view returns (uint256 liquidity, uint256 amount0, uint256 amount1) {
-        // Limit lower tick
-        int24 limitLower = IHypervisor(cygnusNebula.underlying).limitLower();
-
-        // Limit upper tick
-        int24 limitUpper = IHypervisor(cygnusNebula.underlying).limitUpper();
-
-        // Get the position given the ranges
-        (uint128 positionLiquidity, uint128 tokensOwed0, uint128 tokensOwed1) = algebraPosition(
-            cygnusNebula.underlying,
-            limitLower,
-            limitUpper,
-            cygnusNebula.algebraPool
-        );
-
-        // Compute amounts for liquidity based on our sqrtPrice
-        (amount0, amount1) = getAmountsForLiquidity(sqrtPriceX96, limitLower, limitUpper, positionLiquidity);
-
-        // Amount of token0 in limit position
-        amount0 += tokensOwed0;
-
-        // Amount of token1 in limit position
-        amount1 += tokensOwed1;
-
-        // Liquidity in limit position
-        liquidity = positionLiquidity;
-    }
-
-    /**
      *  @notice Get total amounts given a stored pair and a price
      *  @param cygnusNebula Struct of the LP Token pair
      *  @param sqrtPriceX96 The pre-computed sqrtPriceX96
@@ -346,6 +354,7 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
         // Total1 = base1 + limit1 + hypervisors balance of token1
         total1 = cygnusNebula.token1.balanceOf(cygnusNebula.underlying) + base1 + limit1;
     }
+
     /*  ─────────────────────────────────────────────── Public ────────────────────────────────────────────────  */
 
     /**
@@ -378,7 +387,7 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
         // The log APR is = (lorRateDif * 1 year) / time since last update
         uint256 logAprInYear = (logRateDiff * SECONDS_PER_YEAR) / timeElapsed;
 
-        // Get the natural exponent of the log APR
+        // Get the natural exponent of the log APR and substract 1
         uint256 annualizedApr = logAprInYear.exp() - 1e18;
 
         // Returns the annualized APR, taking into account time since last update
@@ -400,7 +409,9 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
     /**
      *  @inheritdoc ICygnusNebulaOracle
      */
-    function assetPricesUsd(address lpTokenPair) external view override returns (uint256 tokenPriceA, uint256 tokenPriceB) {
+    function assetPricesUsd(
+        address lpTokenPair
+    ) external view override returns (uint256 tokenPriceA, uint256 tokenPriceB) {
         // Load to memory
         CygnusNebula memory cygnusNebula = getNebula[lpTokenPair];
 
@@ -446,11 +457,10 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
             revert CygnusNebulaOracle__PairNotInitialized(lpTokenPair);
         }
 
-        // 1. Get price of the assets from Chainlink 
-        // Price token0
+        // 1. Get price of the assets from Chainlink; token0
         (, int256 priceA, , , ) = cygnusNebula.priceFeedA.latestRoundData();
 
-        // Price Token1
+        // Price token1
         (, int256 priceB, , , ) = cygnusNebula.priceFeedB.latestRoundData();
 
         // Adjust price Token A to 18 decimals
@@ -461,7 +471,12 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
 
         // 2. Get the sqrtPrice given asset prices and decimal of assets (stored when initialized)
         // sqrtPriceX96 = sqrt((p0 * 10^UNITS_1 * 2^96) / (p1 * 10^UNITS_0)) * 2^48
-        uint160 sqrtPriceX96 = getSqrtPriceX96(adjustedPriceA, cygnusNebula.token0Decimals, adjustedPriceB, cygnusNebula.token1Decimals);
+        uint160 sqrtPriceX96 = getSqrtPriceX96Internal(
+            adjustedPriceA,
+            cygnusNebula.token0Decimals,
+            adjustedPriceB,
+            cygnusNebula.token1Decimals
+        );
 
         // 3. Get the fair reserves of token0 and token1 given our sqrtPricex96
         (uint256 reservesTokenA, uint256 reservesTokenB) = getTotalAmountsInternal(cygnusNebula, sqrtPriceX96);
@@ -491,7 +506,9 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
     /**
      *  @inheritdoc ICygnusNebulaOracle
      */
-    function getLimitPosition(address lpTokenPair) external view override returns (uint256 liquidity, uint256 total0, uint256 total1) {
+    function getLimitPosition(
+        address lpTokenPair
+    ) external view override returns (uint256 liquidity, uint256 total0, uint256 total1) {
         // Load to memory
         CygnusNebula memory cygnusNebula = getNebula[lpTokenPair];
 
@@ -513,7 +530,12 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
         uint256 adjustedPriceB = normalize(IERC20(address(cygnusNebula.priceFeedB)), uint256(priceB));
 
         //  sqrtPriceX96
-        uint160 sqrtPriceX96 = getSqrtPriceX96(adjustedPriceA, cygnusNebula.token0Decimals, adjustedPriceB, cygnusNebula.token1Decimals);
+        uint160 sqrtPriceX96 = getSqrtPriceX96Internal(
+            adjustedPriceA,
+            cygnusNebula.token0Decimals,
+            adjustedPriceB,
+            cygnusNebula.token1Decimals
+        );
 
         // Return liquidity and total amounts of limit position
         return getLimitPositionInternal(cygnusNebula, sqrtPriceX96);
@@ -522,7 +544,9 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
     /**
      *  @inheritdoc ICygnusNebulaOracle
      */
-    function getBasePosition(address lpTokenPair) external view override returns (uint256 liquidity, uint256 total0, uint256 total1) {
+    function getBasePosition(
+        address lpTokenPair
+    ) external view override returns (uint256 liquidity, uint256 total0, uint256 total1) {
         // Load to memory
         CygnusNebula memory cygnusNebula = getNebula[lpTokenPair];
 
@@ -544,7 +568,12 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
         uint256 adjustedPriceB = normalize(IERC20(address(cygnusNebula.priceFeedB)), uint256(priceB));
 
         // sqrtPriceX96
-        uint160 sqrtPriceX96 = getSqrtPriceX96(adjustedPriceA, cygnusNebula.token0Decimals, adjustedPriceB, cygnusNebula.token1Decimals);
+        uint160 sqrtPriceX96 = getSqrtPriceX96Internal(
+            adjustedPriceA,
+            cygnusNebula.token0Decimals,
+            adjustedPriceB,
+            cygnusNebula.token1Decimals
+        );
 
         // Return liquidity and total amounts of base position
         return getBasePositionInternal(cygnusNebula, sqrtPriceX96);
@@ -575,7 +604,12 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
         uint256 adjustedPriceB = normalize(IERC20(address(cygnusNebula.priceFeedB)), uint256(priceB));
 
         // sqrtPriceX96
-        uint160 sqrtPriceX96 = getSqrtPriceX96(adjustedPriceA, cygnusNebula.token0Decimals, adjustedPriceB, cygnusNebula.token1Decimals);
+        uint160 sqrtPriceX96 = getSqrtPriceX96Internal(
+            adjustedPriceA,
+            cygnusNebula.token0Decimals,
+            adjustedPriceB,
+            cygnusNebula.token1Decimals
+        );
 
         // Base + Limit + Balance of Hypervisor
         return getTotalAmountsInternal(cygnusNebula, sqrtPriceX96);
