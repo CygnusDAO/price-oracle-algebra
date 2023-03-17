@@ -1,11 +1,12 @@
-# Cygnus LP Oracle
+# Cygnus LP Oracle - Concentrated Liquidity
 
-A fair reserves LP Oracle for UniswapV2-style AMMs using Chainlink price feeds.
+A fair reserves LP Oracle for concentrated liquidity pools such as UniswapV3 or Algebra.
 
-It returns the price of 1 LP Token denominated in USDC.
+We calculate the `sqrtPriceX96` from our oracles and then derive the pool's fair reserves from the price.
 
-The oracle returns the price of each LP Token's assets from Chainlink price feeds and uses it to query against the pool's
-constant `K` to avoid using the reserves themselves to determine LP price. This prevents price manipulations from attacks that move along
-constant AMM curves such as flash loans.
-
-For more info read [here](https://blog.alphaventuredao.io/fair-lp-token-pricing/) and [here](https://cmichel.io/pricing-lp-tokens/)
+```solidity
+sqrtPriceX96 = sqrt(token1 / token0) * 2^96
+             = sqrt((p0 * 10**decimals1) / (p1 * 10**decimals0)) * 2^96
+             = sqrt((p0 * 10**decimals1) / (p1 * 10**decimals0)) * 2^48 * 2^48
+             = sqrt((p0 * 10**decimals1 * 2^96) / (p1 * 10**decimals0)) * 2^48
+```
