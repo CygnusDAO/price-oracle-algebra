@@ -30,6 +30,7 @@ import { AggregatorV3Interface } from "./interfaces/AggregatorV3Interface.sol";
  *          itself, avoiding price manipulation.`
  *
  *          First we calculate the sqrt price given asset prices:
+ *
  *          sqrtPriceX96 = sqrt(token1/token0) * 2^96                                 [From Uniswap's definition]
  *                       = sqrt((p0 * 10^UNITS_1) / (p1 * 10^UNITS_0)) * 2^96
  *                       = sqrt((p0 * 10^UNITS_1) / (p1 * 10^UNITS_0)) * 2^48 * 2^48
@@ -58,9 +59,14 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
      *  @custom:struct CygnusNebula Official record of all Chainlink oracles used by Cygnus
      *  @custom:member initialized Whether an LP Token is being tracked or not
      *  @custom:member oracleId The ID of the LP Token tracked by the oracle
-     *  @custom:member underlying The address of the LP Token
-     *  @custom:member priceFeedA The address of the Chainlink aggregator used for this LP Token's Token0
-     *  @custom:member priceFeedB The address of the Chainlink aggregator used for this LP Token's Token1
+     *  @custom:member underlying The address of the LP Token (vault token)
+     *  @custom:member algebraPool The pool for the underlying LP token
+     *  @custom:member token0 The address of token0 from the LP token
+     *  @custom:member token1 The address of token1 from the LP token
+     *  @custom:member token0Decimals The decimals of token0 from the LP token
+     *  @custom:member token1Decimals The decimals of token1 from the LP token
+     *  @custom:member priceFeedA The address of the Chainlink aggregator for token0
+     *  @custom:member priceFeedB The address of the Chainlink aggregator for token1
      */
     struct CygnusNebula {
         bool initialized;
