@@ -2,21 +2,21 @@
 pragma solidity >=0.8.4;
 
 // Dependencies
-import { ICygnusNebulaOracle } from "./interfaces/ICygnusNebulaOracle.sol";
-import { Context } from "./utils/Context.sol";
-import { ReentrancyGuard } from "./utils/ReentrancyGuard.sol";
-import { ERC20Normalizer } from "./utils/ERC20Normalizer.sol";
+import {ICygnusNebulaOracle} from "./interfaces/ICygnusNebulaOracle.sol";
+import {Context} from "./utils/Context.sol";
+import {ReentrancyGuard} from "./utils/ReentrancyGuard.sol";
+import {ERC20Normalizer} from "./utils/ERC20Normalizer.sol";
 
 // Libraries
-import { TickMath } from "./libraries/TickMath.sol";
-import { LiquidityAmounts } from "./libraries/LiquidityAmounts.sol";
-import { PRBMath, PRBMathUD60x18 } from "./libraries/PRBMathUD60x18.sol";
+import {TickMath} from "./libraries/TickMath.sol";
+import {LiquidityAmounts} from "./libraries/LiquidityAmounts.sol";
+import {PRBMath, PRBMathUD60x18} from "./libraries/PRBMathUD60x18.sol";
 
 // Interfaces
-import { IERC20 } from "./interfaces/IERC20.sol";
-import { IHypervisor } from "./interfaces/IHypervisor.sol";
-import { IAlgebraPoolState } from "./interfaces/IAlgebraPoolState.sol";
-import { AggregatorV3Interface } from "./interfaces/AggregatorV3Interface.sol";
+import {IERC20} from "./interfaces/IERC20.sol";
+import {IHypervisor} from "./interfaces/IHypervisor.sol";
+import {IAlgebraPoolState} from "./interfaces/IAlgebraPoolState.sol";
+import {AggregatorV3Interface} from "./interfaces/AggregatorV3Interface.sol";
 
 /**
  *  @title  CygnusNebulaOracle
@@ -45,7 +45,7 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
         ═══════════════════════════════════════════════════════════════════════════════════════════════════════  */
 
     /**
-     *  @custom:library FixedPointMathLib Arithmetic library with operations for fixed-point numbers
+     *  @custom:library PRBMathUD60x18 Arithmetic library with operations for fixed-point numbers
      */
     using PRBMathUD60x18 for uint256;
 
@@ -296,7 +296,6 @@ contract CygnusNebulaOracle is ICygnusNebulaOracle, Context, ReentrancyGuard, ER
         // Liquidity in limit position
         liquidity = positionLiquidity;
     }
-
 
     /**
      *  @notice Get the base position from the Gamma Vault with our sqrtPrice
