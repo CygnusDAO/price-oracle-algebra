@@ -28,28 +28,6 @@
     {
       "inputs": [
         {
-          "internalType": "contract IDexPair",
-          "name": "lpTokenPair",
-          "type": "address"
-        }
-      ],
-      "name": "CygnusNebulaOracle__NebulaRecordAlreadyInitialized",
-      "type": "error"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "contract IDexPair",
-          "name": "lpTokenPair",
-          "type": "address"
-        }
-      ],
-      "name": "CygnusNebulaOracle__NebulaRecordNotInitialized",
-      "type": "error"
-    },
-    {
-      "inputs": [
-        {
           "internalType": "address",
           "name": "lpTokenPair",
           "type": "address"
@@ -103,15 +81,21 @@
         },
         {
           "indexed": false,
-          "internalType": "contract AggregatorV3Interface",
-          "name": "priceFeedA",
-          "type": "address"
+          "internalType": "contract IERC20[]",
+          "name": "poolTokens",
+          "type": "address[]"
         },
         {
           "indexed": false,
-          "internalType": "contract AggregatorV3Interface",
-          "name": "priceFeedB",
-          "type": "address"
+          "internalType": "uint256[]",
+          "name": "tokenDecimals",
+          "type": "uint256[]"
+        },
+        {
+          "indexed": false,
+          "internalType": "contract AggregatorV3Interface[]",
+          "name": "priceFeeds",
+          "type": "address[]"
         }
       ],
       "name": "InitializeCygnusNebula",
@@ -374,54 +358,46 @@
       "name": "getNebula",
       "outputs": [
         {
-          "internalType": "bool",
-          "name": "initialized",
-          "type": "bool"
-        },
-        {
-          "internalType": "uint88",
-          "name": "oracleId",
-          "type": "uint88"
-        },
-        {
-          "internalType": "address",
-          "name": "underlying",
-          "type": "address"
-        },
-        {
-          "internalType": "address",
-          "name": "algebraPool",
-          "type": "address"
-        },
-        {
-          "internalType": "contract IERC20",
-          "name": "token0",
-          "type": "address"
-        },
-        {
-          "internalType": "contract IERC20",
-          "name": "token1",
-          "type": "address"
-        },
-        {
-          "internalType": "uint256",
-          "name": "token0Decimals",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "token1Decimals",
-          "type": "uint256"
-        },
-        {
-          "internalType": "contract AggregatorV3Interface",
-          "name": "priceFeedA",
-          "type": "address"
-        },
-        {
-          "internalType": "contract AggregatorV3Interface",
-          "name": "priceFeedB",
-          "type": "address"
+          "components": [
+            {
+              "internalType": "bool",
+              "name": "initialized",
+              "type": "bool"
+            },
+            {
+              "internalType": "uint88",
+              "name": "oracleId",
+              "type": "uint88"
+            },
+            {
+              "internalType": "string",
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "internalType": "address",
+              "name": "underlying",
+              "type": "address"
+            },
+            {
+              "internalType": "contract IERC20[]",
+              "name": "poolTokens",
+              "type": "address[]"
+            },
+            {
+              "internalType": "uint256[]",
+              "name": "tokenDecimals",
+              "type": "uint256[]"
+            },
+            {
+              "internalType": "contract AggregatorV3Interface[]",
+              "name": "priceFeeds",
+              "type": "address[]"
+            }
+          ],
+          "internalType": "struct ICygnusNebulaOracle.CygnusNebula",
+          "name": "",
+          "type": "tuple"
         }
       ],
       "stateMutability": "view",
@@ -459,14 +435,9 @@
           "type": "address"
         },
         {
-          "internalType": "contract AggregatorV3Interface",
-          "name": "priceFeedA",
-          "type": "address"
-        },
-        {
-          "internalType": "contract AggregatorV3Interface",
-          "name": "priceFeedB",
-          "type": "address"
+          "internalType": "contract AggregatorV3Interface[]",
+          "name": "aggregators",
+          "type": "address[]"
         }
       ],
       "name": "initializeNebula",

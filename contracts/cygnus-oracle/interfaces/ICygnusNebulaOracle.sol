@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Unlicensed
 pragma solidity >=0.8.4;
 
-import { AggregatorV3Interface } from "./AggregatorV3Interface.sol";
-import { IERC20 } from "./IERC20.sol";
+import {AggregatorV3Interface} from "./AggregatorV3Interface.sol";
+import {IERC20} from "./IERC20.sol";
 
 /**
  *  @title ICygnusNebulaOracle Interface to interact with Cygnus' Chainlink oracle
@@ -45,16 +45,15 @@ interface ICygnusNebulaOracle {
      *  @param initialized Whether or not the LP Token is initialized
      *  @param oracleId The ID for this oracle
      *  @param lpTokenPair The address of the LP Token
-     *  @param priceFeedA The address of the Chainlink's aggregator contract for this LP Token's token0
-     *  @param priceFeedB The address of the Chainlink's aggregator contract for this LP Token's token1
      *  @custom:event InitializeCygnusNebula Logs when an LP Token pair's price starts being tracked
      */
     event InitializeCygnusNebula(
         bool initialized,
         uint88 oracleId,
         address lpTokenPair,
-        AggregatorV3Interface priceFeedA,
-        AggregatorV3Interface priceFeedB
+        IERC20[] poolTokens,
+        uint256[] tokenDecimals,
+        AggregatorV3Interface[] priceFeeds
     );
 
     /**
@@ -75,39 +74,36 @@ interface ICygnusNebulaOracle {
             3. CONSTANT FUNCTIONS
         ═══════════════════════════════════════════════════════════════════════════════════════════════════════  */
 
+    /*  ────────────────────────────────────────────── Internal ───────────────────────────────────────────────  */
+
+    /**
+     *  @notice Returns the struct record of each oracle used by Cygnus
+     *  @param lpTokenPair The address of the LP Token
+     *  @custom:member initialized Whether an LP Token is being tracked or not
+     *  @custom:member oracleId The ID of the LP Token tracked by the oracle
+     *  @custom:member name Human readable name of the LP Token
+     *  @custom:member underlying The address of the LP Token
+     *  @custom:member poolTokens Array of all the pool tokens
+     *  @custom:member tokenDecimals The decimals of each token
+     *  @custom:member priceFeeds The address of hte price feeds
+     */
+    struct CygnusNebula {
+        bool initialized;
+        uint88 oracleId;
+        string name;
+        address underlying;
+        IERC20[] poolTokens;
+        uint256[] tokenDecimals;
+        AggregatorV3Interface[] priceFeeds;
+    }
+
     /*  ─────────────────────────────────────────────── Public ────────────────────────────────────────────────  */
 
     /**
      *  @notice Returns the struct record of each oracle used by Cygnus
      *  @param lpTokenPair The address of the LP Token
-     *  @return initialized Whether an LP Token is being tracked or not
-     *  @return oracleId The ID of the LP Token tracked by the oracle
-     *  @return underlying The address of the LP Token
-     *  @return algebraPool The address of the Algebra Pool
-     *  @return token0 Address of token0 from the LP
-     *  @return token1 Address of token1 from the LP
-     *  @return token0Decimals Decimals for token0
-     *  @return token1Decimals Decimasl for token1
-     *  @return priceFeedA The address of the Chainlink aggregator used for this LP Token's Token0
-     *  @return priceFeedB The address of the Chainlink aggregator used for this LP Token's Token1
      */
-    function getNebula(
-        address lpTokenPair
-    )
-        external
-        view
-        returns (
-            bool initialized,
-            uint88 oracleId,
-            address underlying,
-            address algebraPool,
-            IERC20 token0,
-            IERC20 token1,
-            uint256 token0Decimals,
-            uint256 token1Decimals,
-            AggregatorV3Interface priceFeedA,
-            AggregatorV3Interface priceFeedB
-        );
+    function getNebula(address lpTokenPair) external view returns (CygnusNebula memory);
 
     /**
      *  @notice Gets the address of the LP Token that (if) is being tracked by this oracle
@@ -242,16 +238,11 @@ interface ICygnusNebulaOracle {
 
     /**
      *  @notice Initialize an LP Token pair, only admin
-     *  @param lpTokenPair The address of the Gamma Vault
-     *  @param priceFeedA The contract address of the Chainlink's aggregator contract for this Gamma Vault's token0
-     *  @param priceFeedB The contract address of the Chainlink's aggregator contract for this Gamma Vault's token1
+     *  @param lpTokenPair The contract address of the LP Token
+     *  @param aggregators Array of Chainlink aggregators for this LP token's tokens
      *  @custom:security non-reentrant
      */
-    function initializeNebula(
-        address lpTokenPair,
-        AggregatorV3Interface priceFeedA,
-        AggregatorV3Interface priceFeedB
-    ) external;
+    function initializeNebula(address lpTokenPair, AggregatorV3Interface[] calldata aggregators) external;
 
     /**
      *  @notice Sets a new pending admin for the Oracle
