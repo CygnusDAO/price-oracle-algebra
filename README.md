@@ -1,8 +1,10 @@
 # Cygnus LP Oracle - Concentrated Liquidity
 
-A fair reserves LP Oracle for concentrated liquidity pools such as UniswapV3 or Algebra.
+A fair reserves LP Oracle for Algebra concentrated liquidity pools.
 
-We calculate the `sqrtPriceX96` from our oracles and then derive the pool's fair reserves from the price.
+We calculate the `sqrtPriceX96` from our oracles and then derive the pool's fair reserves from the price. Modified from MakerDAO:
+
+https://github.com/makerdao/univ3-lp-oracle/blob/master/src/GUniLPOracle.sol
 
 ```solidity
 sqrtPriceX96 = sqrt(token1 / token0) * 2^96
