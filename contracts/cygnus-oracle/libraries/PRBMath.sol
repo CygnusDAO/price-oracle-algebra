@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Unlicense
-pragma solidity >=0.8.4;
+pragma solidity >=0.8.17;
 
 /// @notice Emitted when the result overflows uint256.
 error PRBMath__MulDivFixedPointOverflow(uint256 prod1);
@@ -376,13 +376,13 @@ library PRBMath {
 
     /// @notice Calculates floor(x*y÷denominator) with full precision.
     ///
-    /// @dev Credits to Remco Bloemen under MIT license https://xn--2-umb.com/21/muldiv.
+    /// @dev Credit to Remco Bloemen under MIT license https://xn--2-umb.com/21/muldiv.
     ///
     /// Requirements:
     /// - The denominator cannot be zero.
     /// - The result must fit within uint256.
     ///
-    /// Notes:
+    /// Caveats:
     /// - This function does not work with fixed-point numbers.
     ///
     /// @param x The multiplicand as an uint256.
@@ -404,23 +404,24 @@ library PRBMath {
         // Handle non-overflow cases, 256 by 256 division.
         if (prod1 == 0) {
             unchecked {
-                return prod0 / denominator;
+                result = prod0 / denominator;
             }
+            return result;
         }
 
         // Make sure the result is less than 2^256. Also prevents denominator == 0.
         if (prod1 >= denominator) {
-            revert PRBMath__MulDivOverflow(x, y);
+            revert PRBMath__MulDivOverflow(prod1, denominator);
         }
 
-        ////////////////////////////////////////////////////////////////////////////
-        // 512 by 256 division
-        ////////////////////////////////////////////////////////////////////////////
+        ///////////////////////////////////////////////
+        // 512 by 256 division.
+        ///////////////////////////////////////////////
 
         // Make division exact by subtracting the remainder from [prod1 prod0].
         uint256 remainder;
         assembly {
-            // Compute remainder using the mulmod Yul instruction.
+            // Compute remainder using mulmod.
             remainder := mulmod(x, y, denominator)
 
             // Subtract 256 bit number from 512 bit number.
@@ -428,28 +429,24 @@ library PRBMath {
             prod0 := sub(prod0, remainder)
         }
 
+        // Factor powers of two out of denominator and compute largest power of two divisor of denominator. Always >= 1.
+        // See https://cs.stackexchange.com/q/138556/92363.
         unchecked {
-            // Calculate the largest power of two divisor of the denominator using the unary operator ~. This operation cannot overflow
-            // because the denominator cannot be zero at this point in the function execution. The result is always >= 1.
-            // For more detail, see https://cs.stackexchange.com/q/138556/92363.
+            // Does not overflow because the denominator cannot be zero at this stage in the function.
             uint256 lpotdod = denominator & (~denominator + 1);
-            uint256 flippedLpotdod;
-
             assembly {
-                // Factor powers of two out of denominator.
+                // Divide denominator by lpotdod.
                 denominator := div(denominator, lpotdod)
 
                 // Divide [prod1 prod0] by lpotdod.
                 prod0 := div(prod0, lpotdod)
 
-                // Get the flipped value `2^256 / lpotdod`. If the `lpotdod` is zero, the flipped value is one.
-                // `sub(0, lpotdod)` produces the two's complement version of `lpotdod`, which is equivalent to flipping all the bits.
-                // However, `div` interprets this value as an unsigned value: https://ethereum.stackexchange.com/q/147168/24693
-                flippedLpotdod := add(div(sub(0, lpotdod), lpotdod), 1)
+                // Flip lpotdod such that it is 2^256 / lpotdod. If lpotdod is zero, then it becomes one.
+                lpotdod := add(div(sub(0, lpotdod), lpotdod), 1)
             }
 
             // Shift in bits from prod1 into prod0.
-            prod0 |= prod1 * flippedLpotdod;
+            prod0 |= prod1 * lpotdod;
 
             // Invert denominator mod 2^256. Now that denominator is an odd number, it has an inverse modulo 2^256 such
             // that denominator * inv = 1 mod 2^256. Compute the inverse by starting with a seed that is correct for
@@ -470,6 +467,7 @@ library PRBMath {
             // less than 2^256, this is the final result. We don't need to compute the high bits of the result and prod1
             // is no longer required.
             result = prod0 * inverse;
+            return result;
         }
     }
 
