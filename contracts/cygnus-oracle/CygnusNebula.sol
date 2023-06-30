@@ -488,7 +488,7 @@ contract CygnusNebula is ICygnusNebula {
         uint256 decimals0 = oracle.poolTokensDecimals[0];
 
         // Decimals token1
-        uint256 decimals1 = oracle.poolTokensDecimals[0];
+        uint256 decimals1 = oracle.poolTokensDecimals[1];
 
         // 2. Get the sqrtPrice given asset prices and decimal of assets
         // sqrtPriceX96 = sqrt((p0 * 10^UNITS_1 * 2^96) / (p1 * 10^UNITS_0)) * 2^48
