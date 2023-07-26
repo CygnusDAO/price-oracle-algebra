@@ -32,7 +32,7 @@
                        ░░░░░░    ░░░░░░                                               🛸  ⠀
            .                            .       .             🛰️         .                          
     
-        CYGNUS LP ORACLE (Concentrated LP) - https://cygnusdao.finance                                                          .                     .
+        CYGNUS LP ORACLE (Hypervisor Gamma LP) - https://cygnusdao.finance                                                          .                     .
     ═══════════════════════════════════════════════════════════════════════════════════════════════════════════ */
 pragma solidity >=0.8.17;
 
@@ -93,7 +93,7 @@ contract CygnusNebula is ICygnusNebula {
     /**
      *  @inheritdoc ICygnusNebula
      */
-    string public constant override name = "Cygnus-Nebula: Algebra Concentrated LP Oracle";
+    string public override name = "Cygnus-Nebula: Hypervisor";
 
     /**
      *  @inheritdoc ICygnusNebula
@@ -113,7 +113,17 @@ contract CygnusNebula is ICygnusNebula {
     /**
      *  @inheritdoc ICygnusNebula
      */
-    uint256 public constant AGGREGATOR_SCALAR = 10 ** (18 - 8);
+    uint256 public constant override AGGREGATOR_SCALAR = 10 ** (18 - 8);
+
+    /**
+     *  @inheritdoc ICygnusNebula
+     */
+    uint256 public constant override GRACE_PERIOD = 1 hours;
+
+    /**
+     *  @inheritdoc ICygnusNebula
+     */
+    bytes4 public constant override S = IHypervisor.deposit.selector;
 
     /**
      *  @inheritdoc ICygnusNebula
@@ -133,12 +143,7 @@ contract CygnusNebula is ICygnusNebula {
     /**
      *  @inheritdoc ICygnusNebula
      */
-    address public immutable nebulaRegistry;
-
-    /**
-     *  @inheritdoc ICygnusNebula
-     */
-    bytes4 public immutable sx;
+    address public immutable override nebulaRegistry;
 
     /*  ═══════════════════════════════════════════════════════════════════════════════════════════════════════ 
             3. CONSTRUCTOR
@@ -164,9 +169,6 @@ contract CygnusNebula is ICygnusNebula {
 
         // Registry
         nebulaRegistry = _nebulaRegistry;
-
-        // Deposit function of hypervisor - see `context` modifier
-        sx = IHypervisor.deposit.selector;
     }
 
     /*  ═══════════════════════════════════════════════════════════════════════════════════════════════════════ 
@@ -186,7 +188,9 @@ contract CygnusNebula is ICygnusNebula {
         // IHypervisor.deposit(uint, uint, address, address, uint[4])
         //
         // This staticcall always reverts, but we need to make sure it doesn't fail due to a re-entrancy attack.
-        (, bytes memory revertData) = lpTokenPair.staticcall{gas: 10_000}(abi.encodeWithSelector(sx, 0, 0, 0, 0, [0, 0, 0, 0]));
+        (, bytes memory revertData) = lpTokenPair.staticcall{gas: 10_000}(
+            abi.encodeWithSelector(S, 0, 0, address(0), address(0), [uint256(0), 0, 0, 0])
+        );
         /// @custom:error AlreadyInContext Avoid if we are already in the underlying's context
         if (revertData.length != 0) revert CygnusNebulaOracle__AlreadyInContext();
         _;
@@ -519,7 +523,20 @@ contract CygnusNebula is ICygnusNebula {
     /**
      *  @inheritdoc ICygnusNebula
      */
-    function assetPricesUsd(address lpTokenPair) external view override returns (uint256[] memory) {
+    function lpTokenInfo(
+        address lpTokenPair
+    )
+        external
+        view
+        override
+        returns (
+            IERC20[] memory tokens,
+            uint256[] memory prices,
+            uint256[] memory reserves,
+            uint256[] memory tokenDecimals,
+            uint256[] memory reservesUsd
+        )
+    {
         // Load to storage for gas savings
         NebulaOracle storage nebulaOracle = nebulaOracles[lpTokenPair];
 
@@ -528,11 +545,22 @@ contract CygnusNebula is ICygnusNebula {
             revert CygnusNebulaOracle__PairNotInitialized({lpTokenPair: lpTokenPair});
         }
 
+        // tokens
+        tokens = nebulaOracle.poolTokens;
+
+        // Decimals
+        tokenDecimals = nebulaOracle.poolTokensDecimals;
+
+        // Prices, reserves and tvl in USD
+        prices = new uint256[](nebulaOracle.poolTokens.length);
+        reserves = new uint256[](nebulaOracle.poolTokens.length);
+        reservesUsd = new uint256[](nebulaOracle.poolTokens.length);
+
+        // Reserves
+        (reserves[0], reserves[1]) = IHypervisor(lpTokenPair).getTotalAmounts();
+
         // Price of denom token
         uint256 denomPrice = getPriceInternal(denominationAggregator);
-
-        // Create new array of poolTokens.length to return
-        uint256[] memory prices = new uint256[](nebulaOracle.poolTokens.length);
 
         // Loop through each token
         for (uint256 i = 0; i < nebulaOracle.poolTokens.length; i++) {
@@ -541,10 +569,10 @@ contract CygnusNebula is ICygnusNebula {
 
             // Express asset price in denom token
             prices[i] = assetPrice.div(denomPrice * 10 ** (18 - decimals));
-        }
 
-        // Return uint256[] of token prices denominated in denom token and oracle decimals
-        return prices;
+            // Reserves
+            reservesUsd[i] = ((prices[i] * 10 ** (18 - decimals)) * reserves[i]) / (10 ** nebulaOracle.poolTokensDecimals[i]);
+        }
     }
 
     /*  ═══════════════════════════════════════════════════════════════════════════════════════════════════════ 
@@ -555,15 +583,38 @@ contract CygnusNebula is ICygnusNebula {
 
     /**
      *  @inheritdoc ICygnusNebula
-     *  @custom:security non-reentrant only-admin
+     *  @custom:security only-registry
      */
     function initializeNebulaOracle(address lpTokenPair, AggregatorV3Interface[] calldata aggregators) external override onlyRegistry {
         // Load the CygnusNebula instance for the LP Token pair into storage
         NebulaOracle storage nebulaOracle = nebulaOracles[lpTokenPair];
 
-        // If the LP Token pair is already being tracked by an oracle, revert with an error message
+        // If the LP Token pair is already being tracked by an oracle and we are past grace period revert
+        // We allow to modify oracle if the oracle has been created and we are within the grace period, constant of 1 hour.
+        // We do this since chainlink only has registry on mainnet and we have to manually include aggregators, avoid human error
         if (nebulaOracle.initialized) {
-            revert CygnusNebulaOracle__PairAlreadyInitialized({lpTokenPair: lpTokenPair});
+            // Current timestamp
+            uint256 currentTime = block.timestamp;
+
+            // Time elapsed since we created
+            uint256 timeElapsed = currentTime - nebulaOracle.createdAt;
+
+            /// @custom:error PairAlreadyInitialized Avoid updating the oracle if it has already been initialized and we past grace period
+            if (timeElapsed > GRACE_PERIOD) revert CygnusNebulaOracle__PairAlreadyInitialized({lpTokenPair: lpTokenPair});
+        }
+        // Not initialized, we initialize for the first time
+        else {
+            // Set the status of the new oracle to initialized
+            nebulaOracle.initialized = true;
+
+            // Assign an ID to the new oracle
+            nebulaOracle.oracleId = nebulaSize();
+
+            // Mark creation timestamp
+            nebulaOracle.createdAt = block.timestamp;
+
+            // Add the LP Token pair to the list of all tracked LP Token pairs
+            allNebulas.push(lpTokenPair);
         }
 
         // Create a memory array of tokens with the same length as the number of price aggregators
@@ -590,9 +641,6 @@ contract CygnusNebula is ICygnusNebula {
             priceDecimals[i] = aggregators[i].decimals();
         }
 
-        // Assign an ID to the new oracle
-        nebulaOracle.oracleId = nebulaSize();
-
         // Set the user-friendly name of the new oracle to the name of the LP Token pair
         nebulaOracle.name = IERC20(lpTokenPair).name();
 
@@ -610,12 +658,6 @@ contract CygnusNebula is ICygnusNebula {
 
         // Store the decimals for each aggregator
         nebulaOracle.priceFeedsDecimals = priceDecimals;
-
-        // Set the status of the new oracle to initialized
-        nebulaOracle.initialized = true;
-
-        // Add the LP Token pair to the list of all tracked LP Token pairs
-        allNebulas.push(lpTokenPair);
 
         /// @custom:event InitializeCygnusNebula
         emit InitializeNebulaOracle(true, nebulaOracle.oracleId, lpTokenPair, poolTokens, tokenDecimals, aggregators, priceDecimals);

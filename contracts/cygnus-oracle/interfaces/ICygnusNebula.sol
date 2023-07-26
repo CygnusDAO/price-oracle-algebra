@@ -65,7 +65,7 @@ interface ICygnusNebula {
      */
     error CygnusNebulaOracle__AlreadyInContext();
 
-/*  ═══════════════════════════════════════════════════════════════════════════════════════════════════════ 
+    /*  ═══════════════════════════════════════════════════════════════════════════════════════════════════════ 
             2. CUSTOM EVENTS
         ═══════════════════════════════════════════════════════════════════════════════════════════════════════  */
 
@@ -138,6 +138,7 @@ interface ICygnusNebula {
         uint256[] poolTokensDecimals;
         AggregatorV3Interface[] priceFeeds;
         uint256[] priceFeedsDecimals;
+        uint256 createdAt;
     }
 
     /*  ─────────────────────────────────────────────── Public ────────────────────────────────────────────────  */
@@ -172,6 +173,11 @@ interface ICygnusNebula {
      *  @return SECONDS_PER_YEAR The number of seconds in year assumed by the oracle
      */
     function SECONDS_PER_YEAR() external view returns (uint256);
+
+    /**
+     *  @return GRACE_PERIOD The time period where oracle can be modified (1 hour)
+     */
+    function GRACE_PERIOD() external pure returns (uint256);
 
     /**
      *  @notice We use a constant to set the chainlink aggregator decimals. As stated by chainlink all decimals for tokens
@@ -212,9 +218,9 @@ interface ICygnusNebula {
     function nebulaRegistry() external view returns (address);
 
     /**
-     *  @return sx The selector of a non-reentrant function in the underlying LP pair to ensure we are not within the pair's context
+     *  @return S The selector of a non-reentrant function in the underlying LP pair to ensure we are not within the pair's context
      */
-    function sx() external view returns (bytes4);
+    function S() external pure returns (bytes4);
 
     /*  ────────────────────────────────────────────── External ───────────────────────────────────────────────  */
 
@@ -249,13 +255,29 @@ interface ICygnusNebula {
     function lpTokenPriceUsd(address lpTokenPair) external view returns (uint256 lpTokenPrice);
 
     /**
-     *  @notice Gets the latest price of the LP Token's token0 and token1 denominated in denomination token
-     *  @notice Used by Cygnus Altair contract to calculate optimal amount of leverage
+     *  @notice Gets the latest info for an initialized LP Token
+     *  @notice Can be used to calculate optimal amount of leverage, avoid calling on-chain.
      *
      *  @param lpTokenPair The address of the LP Token
-     *  @return Array of the LP's asset prices
+     *
+     *  @return tokens Array of addresses of all the LP's assets
+     *  @return prices Array of prices of each asset (in denom token)
+     *  @return reserves Array of reserves of each asset in the LP
+     *  @return tokenDecimals Array of decimals of each token
+     *  @return reservesUsd Array of reserves of each asset in USD
      */
-    function assetPricesUsd(address lpTokenPair) external view returns (uint256[] memory);
+    function lpTokenInfo(
+        address lpTokenPair
+    )
+        external
+        view
+        returns (
+            IERC20[] memory tokens,
+            uint256[] memory prices,
+            uint256[] memory reserves,
+            uint256[] memory tokenDecimals,
+            uint256[] memory reservesUsd
+        );
 
     /*  ═══════════════════════════════════════════════════════════════════════════════════════════════════════ 
             4. NON-CONSTANT FUNCTIONS
